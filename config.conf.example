@@ -1,0 +1,59 @@
+#!/bin/sh
+# Telegram WOL Bot Configuration File
+# Edit this file with your settings
+
+# ===========================================
+# TELEGRAM BOT SETTINGS
+# ===========================================
+# Get your bot token from @BotFather on Telegram
+BOT_TOKEN="YOUR_BOT_TOKEN_HERE"
+
+# Authorized Telegram user IDs (space-separated)
+# To get your user ID, message @userinfobot on Telegram
+AUTHORIZED_USERS="123456789 987654321"
+
+# ===========================================
+# NETWORK SETTINGS
+# ===========================================
+# Default network interface for WOL packets
+# Common OpenWRT interfaces: br-lan, eth0, eth1
+DEFAULT_INTERFACE="br-lan"
+
+# ===========================================
+# DEVICE CONFIGURATIONS
+# ===========================================
+# Add your devices here using this format:
+# DEVICE_<KEY>_NAME="Friendly Name"
+# DEVICE_<KEY>_MAC="AA:BB:CC:DD:EE:FF"
+# DEVICE_<KEY>_INTERFACE="br-lan"  # Optional, uses DEFAULT_INTERFACE if not set
+#
+# The <KEY> is what you'll use in commands, e.g., /wake PC
+
+# Example Device 1 - Gaming PC
+DEVICE_PC_NAME="Gaming PC"
+DEVICE_PC_MAC="AA:BB:CC:DD:EE:FF"
+DEVICE_PC_INTERFACE="br-lan"
+
+# Example Device 2 - NAS Server
+DEVICE_NAS_NAME="NAS Server"
+DEVICE_NAS_MAC="11:22:33:44:55:66"
+DEVICE_NAS_INTERFACE="br-lan"
+
+# Example Device 3 - Media Server
+DEVICE_MEDIA_NAME="Media Server"
+DEVICE_MEDIA_MAC="AA:11:BB:22:CC:33"
+# This device will use DEFAULT_INTERFACE
+
+# Example Device 4 - Workstation
+DEVICE_WORK_NAME="Workstation"
+DEVICE_WORK_MAC="FF:EE:DD:CC:BB:AA"
+DEVICE_WORK_INTERFACE="br-lan"
+
+# ===========================================
+# NOTES
+# ===========================================
+# 1. To add more devices, copy the pattern above
+# 2. Device keys (PC, NAS, etc.) should be UPPERCASE
+# 3. MAC addresses must be in format AA:BB:CC:DD:EE:FF
+# 4. You can use /wake pc, /wake PC, or /wake Pc - case insensitive
+# 5. Use /list in Telegram to see all configured devices
