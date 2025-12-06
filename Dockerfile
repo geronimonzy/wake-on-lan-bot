@@ -14,12 +14,18 @@ LABEL maintainer="Telegram WOL Bot" \
       version="2.0.0"
 
 # Install runtime dependencies
-RUN apk add --no-cache \
+RUN apk update && \
+    apk add --no-cache \
     curl \
     jq \
-    etherwake \
     bash \
+    perl \
     && rm -rf /var/cache/apk/*
+
+# Install wakeonlan (Perl script - widely available)
+RUN curl -L https://raw.githubusercontent.com/jpoliv/wakeonlan/master/wakeonlan \
+    -o /usr/local/bin/wakeonlan && \
+    chmod +x /usr/local/bin/wakeonlan
 
 # Create non-root user and group
 RUN addgroup -g 1000 wolbot && \
@@ -30,11 +36,11 @@ WORKDIR /app
 
 # Copy application files
 COPY --chown=wolbot:wolbot bot.sh /app/bot.sh
-COPY --chown=wolbot:wolbot devices.conf.example /app/devices.conf.example
+COPY --chown=wolbot:wolbot devices.conf /app/devices.conf
 
 # Make script executable
 RUN chmod 500 /app/bot.sh && \
-    chmod 400 /app/devices.conf.example
+    chmod 400 /app/devices.conf
 
 # Create state directory
 RUN mkdir -p /app/state && \

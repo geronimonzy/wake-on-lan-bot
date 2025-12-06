@@ -462,3 +462,30 @@ If you encounter issues:
 
 **Migration typically takes 10-15 minutes.**
 Most of your configuration can be copied directly!
+
+
+
+scp bot.sh $REMOTE_HOST:$REMOTE_DIR/
+scp Dockerfile $REMOTE_HOST:$REMOTE_DIR/
+scp docker-compose.yml $REMOTE_HOST:$REMOTE_DIR/
+scp .env.example $REMOTE_HOST:$REMOTE_DIR/
+scp devices.conf.example
+$REMOTE_HOST:$REMOTE_DIR/
+
+scp bot.sh Dockerfile docker-compose.yml .env devices.conf setup.sh Makefile root@192.168.1.1:/root/wol-bot/
+
+      scp openwrt-integration/adblock-fast-widget root@192.168.1.1:/www/cgi-bin/
+
+
+curl -SL https://github.com/docker/buildx/releases/latest/download/buildx-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m) -o ~/.docker/cli-plugins/docker-buildx
+
+curl -SL https://github.com/docker/buildx/releases/latest/download/buildx-linux-arm64 -o ~/.docker/cli-plugins/docker-buildx
+
+sudo curl -SL https://github.com/docker/buildx/releases/latest/download/buildx-linux-arm64 -o /usr/lib/docker/cli-plugins/docker-buildx
+
+ls -lh /usr/lib/docker/cli-plugins/docker-buildx  
+cat /usr/lib/docker/cli-plugins/docker-buildx
+
+curl -L https://github.com/docker/buildx/releases/download/v0.12.1/buildx-v0.12.1.linux-arm64 -o /usr/lib/docker/cli-plugins/docker-buildx
+
+chmod +x /usr/lib/docker/cli-plugins/docker-buildx

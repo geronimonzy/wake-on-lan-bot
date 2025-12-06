@@ -248,11 +248,22 @@ send_wol() {
         return 1
     fi
 
+    # Detect available WOL command
+    local wol_cmd=""
+    if command -v etherwake >/dev/null 2>&1; then
+        wol_cmd="etherwake"
+    elif command -v wakeonlan >/dev/null 2>&1; then
+        wol_cmd="wakeonlan"
+    else
+        echo "ERROR: No WOL command found (etherwake or wakeonlan)" >&2
+        return 1
+    fi
+
     # Send WOL packet
     if [[ -n "${interface}" ]]; then
-        etherwake -i "${interface}" "${mac}" >/dev/null 2>&1
+        ${wol_cmd} -i "${interface}" "${mac}" >/dev/null 2>&1
     else
-        etherwake "${mac}" >/dev/null 2>&1
+        ${wol_cmd} "${mac}" >/dev/null 2>&1
     fi
 
     return $?
