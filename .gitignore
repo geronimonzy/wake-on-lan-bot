@@ -8,10 +8,13 @@ devices.conf
 # State files
 state/
 *.offset
+*.lock
+rate_limit
 
 # Logs
 *.log
 logs/
+security.log
 
 # Temporary files
 tmp/

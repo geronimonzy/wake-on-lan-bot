@@ -5,7 +5,14 @@
 
 # Configuration file path
 CONFIG_FILE="/root/wol-bot/config.conf"
-STATE_FILE="/tmp/telegram-bot-offset"
+STATE_DIR="/root/wol-bot/state"
+STATE_FILE="$STATE_DIR/offset"
+RATE_LIMIT_FILE="$STATE_DIR/rate_limit"
+SECURITY_LOG="/root/wol-bot/security.log"
+
+# Create state directory if it doesn't exist
+mkdir -p "$STATE_DIR"
+chmod 700 "$STATE_DIR"
 
 # Load configuration
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -27,24 +34,122 @@ done
 # Telegram API URLs
 API_URL="https://api.telegram.org/bot${BOT_TOKEN}"
 
-# Function to get device MAC address
+# Rate limiting (seconds between WOL commands for same device)
+RATE_LIMIT_SECONDS="${RATE_LIMIT_SECONDS:-10}"
+
+# Security logging function
+log_security_event() {
+    local event="$1"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] $event" >> "$SECURITY_LOG"
+    chmod 600 "$SECURITY_LOG" 2>/dev/null
+}
+
+# Validate device key format (only alphanumeric and underscore, 1-32 chars)
+validate_device_key() {
+    local key="$1"
+    echo "$key" | grep -qE '^[A-Z0-9_]{1,32}$'
+    return $?
+}
+
+# Validate MAC address format
+validate_mac_address() {
+    local mac="$1"
+    echo "$mac" | grep -qE '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+    return $?
+}
+
+# Validate network interface exists
+validate_interface() {
+    local interface="$1"
+    if [ -z "$interface" ]; then
+        return 0  # Empty interface is OK (uses default)
+    fi
+    ip link show "$interface" >/dev/null 2>&1
+    return $?
+}
+
+# Function to get device MAC address (safe from command injection)
 get_device_mac() {
     local device_key="$1"
-    eval echo "\$DEVICE_${device_key}_MAC"
+
+    # Validate device key format first
+    if ! validate_device_key "$device_key"; then
+        return 1
+    fi
+
+    # Safe variable expansion
+    eval "local mac=\${DEVICE_${device_key}_MAC:-}"
+    echo "$mac"
 }
 
-# Function to get device name
+# Function to get device name (safe from command injection)
 get_device_name() {
     local device_key="$1"
-    eval echo "\$DEVICE_${device_key}_NAME"
+
+    # Validate device key format first
+    if ! validate_device_key "$device_key"; then
+        return 1
+    fi
+
+    # Safe variable expansion
+    eval "local name=\${DEVICE_${device_key}_NAME:-}"
+    echo "$name"
 }
 
-# Function to get device interface
+# Function to get device interface (safe from command injection)
 get_device_interface() {
     local device_key="$1"
-    local interface
-    eval interface="\$DEVICE_${device_key}_INTERFACE"
+
+    # Validate device key format first
+    if ! validate_device_key "$device_key"; then
+        echo "$DEFAULT_INTERFACE"
+        return
+    fi
+
+    # Safe variable expansion
+    eval "local interface=\${DEVICE_${device_key}_INTERFACE:-}"
     echo "${interface:-$DEFAULT_INTERFACE}"
+}
+
+# Check if device is rate limited
+check_rate_limit() {
+    local device_key="$1"
+    local current_time=$(date +%s)
+    local last_wake_time=0
+
+    # Read last wake time from rate limit file
+    if [ -f "$RATE_LIMIT_FILE" ]; then
+        last_wake_time=$(grep "^${device_key}:" "$RATE_LIMIT_FILE" 2>/dev/null | cut -d: -f2)
+        last_wake_time=${last_wake_time:-0}
+    fi
+
+    local time_diff=$((current_time - last_wake_time))
+
+    if [ $time_diff -lt $RATE_LIMIT_SECONDS ]; then
+        local wait_time=$((RATE_LIMIT_SECONDS - time_diff))
+        return $wait_time
+    fi
+
+    return 0
+}
+
+# Update rate limit timestamp
+update_rate_limit() {
+    local device_key="$1"
+    local current_time=$(date +%s)
+
+    # Create or update rate limit file
+    touch "$RATE_LIMIT_FILE"
+    chmod 600 "$RATE_LIMIT_FILE"
+
+    # Remove old entry and add new one
+    if [ -f "$RATE_LIMIT_FILE" ]; then
+        grep -v "^${device_key}:" "$RATE_LIMIT_FILE" > "${RATE_LIMIT_FILE}.tmp" 2>/dev/null || true
+        mv "${RATE_LIMIT_FILE}.tmp" "$RATE_LIMIT_FILE"
+    fi
+
+    echo "${device_key}:${current_time}" >> "$RATE_LIMIT_FILE"
 }
 
 # Function to check if user is authorized
@@ -55,6 +160,7 @@ is_authorized() {
             return 0
         fi
     done
+    log_security_event "UNAUTHORIZED_ACCESS: User ID $user_id attempted access"
     return 1
 }
 
@@ -87,13 +193,25 @@ send_message() {
 send_wol() {
     local mac="$1"
     local interface="$2"
-    
+
+    # Validate MAC address format
+    if ! validate_mac_address "$mac"; then
+        log_security_event "INVALID_MAC: Attempted to send WOL to invalid MAC: $mac"
+        return 1
+    fi
+
+    # Validate interface if specified
+    if ! validate_interface "$interface"; then
+        log_security_event "INVALID_INTERFACE: Invalid interface specified: $interface"
+        return 1
+    fi
+
     if [ -n "$interface" ]; then
         etherwake -i "$interface" "$mac" >/dev/null 2>&1
     else
         etherwake "$mac" >/dev/null 2>&1
     fi
-    
+
     return $?
 }
 
@@ -125,40 +243,57 @@ handle_wake_command() {
     local chat_id="$1"
     local user_id="$2"
     local device_key="$3"
-    
+
     # Check authorization
     if ! is_authorized "$user_id"; then
         send_message "$chat_id" "❌ Unauthorized. Access denied."
-        echo "Unauthorized access attempt from user ID: $user_id"
         return
     fi
-    
+
     # Check if device key provided
     if [ -z "$device_key" ]; then
         send_message "$chat_id" "⚠️ Please specify a device.\nExample: /wake pc\n\nUse /list to see available devices."
         return
     fi
-    
+
     # Convert to uppercase for consistency
     device_key=$(echo "$device_key" | tr '[:lower:]' '[:upper:]')
-    
+
+    # Validate device key format (prevent command injection)
+    if ! validate_device_key "$device_key"; then
+        send_message "$chat_id" "❌ Invalid device name format. Use only letters, numbers, and underscores."
+        log_security_event "INVALID_DEVICE_KEY: User $user_id attempted invalid device key: $device_key"
+        return
+    fi
+
     # Get device information
     local mac=$(get_device_mac "$device_key")
     local name=$(get_device_name "$device_key")
     local interface=$(get_device_interface "$device_key")
-    
+
     if [ -z "$mac" ]; then
         send_message "$chat_id" "❌ Device '$device_key' not found.\n\nUse /list to see available devices."
         return
     fi
-    
+
+    # Check rate limiting
+    check_rate_limit "$device_key"
+    local wait_time=$?
+    if [ $wait_time -gt 0 ]; then
+        send_message "$chat_id" "⏱ Rate limit: Please wait ${wait_time} seconds before waking ${name} again."
+        return
+    fi
+
     # Send WOL packet
     echo "Sending WOL to $name ($mac) on interface $interface"
     if send_wol "$mac" "$interface"; then
+        update_rate_limit "$device_key"
         send_message "$chat_id" "✅ Wake-on-LAN packet sent to *${name}*\n\nDevice: \`${device_key}\`\nMAC: \`${mac}\`\nInterface: \`${interface}\`" "Markdown"
+        log_security_event "WOL_SENT: User $user_id woke device $device_key ($name)"
         echo "WOL packet sent successfully to $name"
     else
         send_message "$chat_id" "❌ Failed to send WOL packet to ${name}."
+        log_security_event "WOL_FAILED: Failed to send WOL to $device_key for user $user_id"
         echo "Failed to send WOL packet to $name"
     fi
 }
@@ -182,44 +317,54 @@ handle_list_command() {
 handle_start_command() {
     local chat_id="$1"
     local user_id="$2"
-    
+
     # Check authorization
     if ! is_authorized "$user_id"; then
-        send_message "$chat_id" "❌ Unauthorized. Your user ID: $user_id"
+        send_message "$chat_id" "❌ Unauthorized. Access denied."
         return
     fi
-    
+
     local welcome_msg="🤖 *Wake-on-LAN Bot*\n\n"
     welcome_msg="${welcome_msg}Welcome! I can wake up devices on your network.\n\n"
     welcome_msg="${welcome_msg}*Commands:*\n"
     welcome_msg="${welcome_msg}/wake <device> - Wake up a device\n"
+    welcome_msg="${welcome_msg}/wakepc - Quick shortcut to wake PC\n"
     welcome_msg="${welcome_msg}/list - Show all devices\n"
     welcome_msg="${welcome_msg}/status - Bot status\n"
     welcome_msg="${welcome_msg}/help - Show this message"
-    
+
     send_message "$chat_id" "$welcome_msg" "Markdown"
+}
+
+# Function to handle /wakepc command (shortcut for /wake pc)
+handle_wakepc_command() {
+    local chat_id="$1"
+    local user_id="$2"
+
+    # Simply call handle_wake_command with "PC" as the device
+    handle_wake_command "$chat_id" "$user_id" "PC"
 }
 
 # Function to handle /status command
 handle_status_command() {
     local chat_id="$1"
     local user_id="$2"
-    
+
     if ! is_authorized "$user_id"; then
         send_message "$chat_id" "❌ Unauthorized."
         return
     fi
-    
+
     local uptime=$(uptime | awk '{print $3, $4}' | sed 's/,//')
     local load=$(uptime | awk -F'load average:' '{print $2}')
     local mem_info=$(free | grep Mem | awk '{printf "%.1f%%", ($3/$2) * 100}')
-    
+
     local status_msg="📊 *Bot Status*\n\n"
     status_msg="${status_msg}✅ Bot is running\n"
     status_msg="${status_msg}⏱ Router uptime: ${uptime}\n"
     status_msg="${status_msg}📈 Load average:${load}\n"
     status_msg="${status_msg}💾 Memory usage: ${mem_info}"
-    
+
     send_message "$chat_id" "$status_msg" "Markdown"
 }
 
@@ -253,6 +398,9 @@ process_message() {
         /wake)
             handle_wake_command "$chat_id" "$user_id" "$arg1"
             ;;
+        /wakepc)
+            handle_wakepc_command "$chat_id" "$user_id"
+            ;;
         /list)
             handle_list_command "$chat_id" "$user_id"
             ;;
@@ -281,15 +429,15 @@ get_updates() {
 # Main bot loop
 main() {
     echo "Starting Telegram WOL Bot..."
-    echo "Bot token configured: ${BOT_TOKEN:0:10}..."
-    echo "Authorized users: $AUTHORIZED_USERS"
-    
+    echo "Configuration loaded successfully"
+    log_security_event "BOT_STARTED: Wake-on-LAN bot service started"
+
     # Load last offset
     local offset=0
     if [ -f "$STATE_FILE" ]; then
         offset=$(cat "$STATE_FILE")
     fi
-    
+
     echo "Bot is running. Press Ctrl+C to stop."
     
     while true; do
@@ -311,17 +459,21 @@ main() {
             echo "$response" | jq -c '.result[]' | while read -r update; do
                 # Get update_id for offset
                 local update_id=$(echo "$update" | jq -r '.update_id')
-                
+
                 # Process the message
                 process_message "$update"
-                
-                # Update offset
-                offset=$((update_id + 1))
-                echo "$offset" > "$STATE_FILE"
+
+                # Update offset with basic locking
+                (
+                    flock -x 200
+                    offset=$((update_id + 1))
+                    echo "$offset" > "$STATE_FILE"
+                    chmod 600 "$STATE_FILE"
+                ) 200>"${STATE_FILE}.lock"
             done
-            
+
             # Update offset after processing all messages
-            offset=$(cat "$STATE_FILE")
+            offset=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
         fi
         
         # Small delay to prevent tight loop on errors
@@ -330,7 +482,7 @@ main() {
 }
 
 # Handle script termination
-trap 'echo "Bot stopped."; exit 0' INT TERM
+trap 'echo "Bot stopped."; log_security_event "BOT_STOPPED: Service terminated"; exit 0' INT TERM
 
 # Start the bot
 main

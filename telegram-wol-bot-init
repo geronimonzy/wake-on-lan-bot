@@ -23,15 +23,32 @@ start_service() {
 
 stop_service() {
     echo "Stopping Telegram WOL Bot"
-    # Kill any running instances
-    killall telegram-wol-bot.sh 2>/dev/null
-    # Clean up PID file
-    rm -f $PIDFILE
+    # Use PID file instead of killall
+    if [ -f "$PIDFILE" ]; then
+        local pid=$(cat "$PIDFILE" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid"
+            # Wait for process to terminate
+            local count=0
+            while kill -0 "$pid" 2>/dev/null && [ $count -lt 10 ]; do
+                sleep 1
+                count=$((count + 1))
+            done
+            # Force kill if still running
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -KILL "$pid" 2>/dev/null
+            fi
+        fi
+        rm -f "$PIDFILE"
+    else
+        # Fallback: if no PID file, try to find and stop the process
+        pkill -TERM -f "$PROG"
+    fi
 }
 
 reload_service() {
-    stop
-    start
+    stop_service
+    start_service
 }
 
 status() {
