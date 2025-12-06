@@ -1,1 +1,43 @@
+# Secrets and sensitive configuration
 config.conf
+devices.conf
+.env
+.env.local
+.env.*.local
+
+# State files
+state/
+*.offset
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# IDE and editor files
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Docker volumes
+data/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

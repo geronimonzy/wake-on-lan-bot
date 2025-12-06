@@ -1,0 +1,42 @@
+# Telegram WOL Bot - Device Configuration
+# This file contains device definitions for Wake-on-LAN
+#
+# SECURITY NOTES:
+# - This file should have restrictive permissions (400 or 600)
+# - Do NOT commit this file to version control if it contains real MAC addresses
+# - Use devices.conf.example for examples only
+#
+# FORMAT:
+# DEVICE_<KEY>_NAME="Friendly Name"
+# DEVICE_<KEY>_MAC="AA:BB:CC:DD:EE:FF"
+# DEVICE_<KEY>_INTERFACE="br-lan"  # Optional
+#
+# RULES:
+# - <KEY> must be UPPERCASE letters, numbers, and underscores only
+# - <KEY> must be 1-32 characters
+# - MAC addresses must be in format AA:BB:CC:DD:EE:FF
+# - Device names can contain letters, numbers, spaces, dots, dashes, underscores
+# - Interface names must be valid Linux network interface names
+# - Lines starting with # are comments
+
+# Example Device 1 - Desktop PC
+DEVICE_PC_NAME="Gaming PC"
+DEVICE_PC_MAC="AA:BB:CC:DD:EE:FF"
+DEVICE_PC_INTERFACE="br-lan"
+
+# Example Device 2 - NAS Server
+DEVICE_NAS_NAME="NAS Server"
+DEVICE_NAS_MAC="11:22:33:44:55:66"
+DEVICE_NAS_INTERFACE="br-lan"
+
+# Example Device 3 - Media Server (no interface specified, will use default)
+DEVICE_MEDIA_NAME="Media Server"
+DEVICE_MEDIA_MAC="AA:11:BB:22:CC:33"
+
+# Example Device 4 - Workstation
+DEVICE_WORK_NAME="Workstation"
+DEVICE_WORK_MAC="FF:EE:DD:CC:BB:AA"
+DEVICE_WORK_INTERFACE="eth0"
+
+# Add more devices here following the same pattern
+# Device keys in commands are case-insensitive: /wake pc or /wake PC both work

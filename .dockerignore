@@ -1,0 +1,72 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Configuration files with sensitive data
+config.conf
+devices.conf
+!devices.conf.example
+
+# State files
+state/
+*.offset
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# IDE and editor files
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Old/backup files
+telegram-wol-bot.sh
+telegram-wol-bot-init
+config.conf.example
+*.backup
+*.bak
+*.old
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Node modules (if any)
+node_modules/
+npm-debug.log
+
+# Python files (if any)
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
